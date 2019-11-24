@@ -12,8 +12,7 @@ void route()
 
     ROUTE_GET("/")
     {
-        printf("HTTP/1.1 200 OK\r\n\r\n");
-        printf("Hello! You are using %s", request_header("User-Agent"));
+        printf("HTTP/1.0 200 OK\r\n\r\n");
     }
 
     ROUTE_POST("/")
