@@ -59,11 +59,11 @@ void serve_forever(const char *PORT)
         }
         else
         {
-//            if ( fork()==0 )
-//            {
+            if ( fork()==0 )
+            {
                 respond(slot);
                 exit(0);
-//            }
+            }
         }
 
         while (clients[slot]!=-1) slot = (slot+1)%CONNMAX;
