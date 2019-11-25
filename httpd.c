@@ -59,11 +59,11 @@ void serve_forever(const char *PORT)
         }
         else
         {
-            if ( fork()==0 )
-            {
+//            if ( fork()==0 )
+//            {
                 respond(slot);
                 exit(0);
-            }
+//            }
         }
 
         while (clients[slot]!=-1) slot = (slot+1)%CONNMAX;
@@ -128,7 +128,7 @@ void respond(int n)
     int rcvd, fd, bytes_read;
     char *ptr;
 
-    buf = malloc(65535);
+    buf = malloc(65535); //TODO: may be bottle neck
     rcvd=recv(clients[n], buf, 65535, 0);
 
     if (rcvd<0)    // receive error
@@ -152,23 +152,35 @@ void respond(int n)
             qs = uri - 1; //use an empty string
         }
 
-        header_t *h = reqhdr;
-        char *t, *t2;
-        while(h < reqhdr+16) {
-            char *k,*v,*t;
-            k = strtok(NULL, "\r\n: \t"); if (!k) break;
-            v = strtok(NULL, "\r\n");     while(*v && *v==' ') v++;
-            h->name  = k;
-            h->value = v;
-            h++;
-            fprintf(stderr, "[H] %s: %s\n", k, v);
-            t = v + 1 + strlen(v);
-            if (t[1] == '\r' && t[2] == '\n') break;
+//        header_t *h = reqhdr;
+//        char *t, *t2;
+//        while(h < reqhdr+16) {
+
+        char *t;
+        payload_size = 0;
+        while (1) {
+            char *header,*header_val;
+            header = strtok(NULL, "\r\n: \t"); if (!header) break;
+            header_val = strtok(NULL, "\r\n");     while(*header_val && *header_val == ' ') header_val++;
+//            h->name  = header;
+//            h->value = header_val;
+//            h++;
+            if(!strcmp(header, "Content-Length")) {
+                payload_size = atol(header_val);
+            }
+
+            fprintf(stderr, "[H] %s: %s\n", header, header_val);
+            t = header_val + strlen(header_val) + 1;
+            if (t[1] == '\r' && t[2] == '\n') { //TODO:
+                t += 2; break;
+            }
         }
         t++; // now the *t shall be the beginning of user payload
-        t2 = request_header("Content-Length"); // and the related header if there is  
+//        t2 = request_header("Content-Length"); // and the related header if there is
         payload = t;
-        payload_size = t2 ? atol(t2) : (rcvd-(t-buf));
+        if(!payload_size) {
+            payload_size = (rcvd-(t-buf));
+        }
 
         // bind clientfd to stdout, making it easier to write
         clientfd = clients[n];
