@@ -1,6 +1,7 @@
 #include "httpd.h"
 #include "json-parser/json.h"
 #include "engine/gosthash.h"
+#include <openssl/sha.h>
 
 int main(int c, char** v)
 {
@@ -20,13 +21,22 @@ void get_gost_hash(const unsigned char* buffer, size_t bytes, unsigned char* out
     done_gost_hash_ctx(&ctx);
 }
 
+
+void get_sha_hash(const unsigned char* buffer, size_t bytes, unsigned char* out_buffer)
+{
+    SHA512_CTX ctx;
+    SHA512_Init(&ctx);
+    SHA512_Update(&ctx, buffer, bytes);
+    SHA512_Final(out_buffer, &ctx);
+}
+
 void route()
 {
     ROUTE_START()
 
     ROUTE_GET("/")
     {
-        printf("HTTP/1.0 200 OK\r\n\r\n");
+        printf("HTTP/1.0 200 OK\r\nServer: cs\r\n\r\nHi buddy!");
     }
 
     ROUTE_POST("/")
@@ -42,18 +52,23 @@ void route()
             get_gost_hash((unsigned char*)data, data_size, gost_hash);
 
             //get sha hash
-            char sha_hash[64];
-            get_gost_hash((unsigned char*)data, data_size, gost_hash);
+            unsigned char sha_hash[64];
+            get_sha_hash((unsigned char*)data, data_size, sha_hash);
 
             //get resp
             printf("HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n{\n");
 
-            printf("\"gost\":\"");
             int i;
+            printf("\"gost\":\"");
             for (i = 0; i < 32; i++) {
                 printf("%02x", gost_hash[i]);
             }
             printf("\",\n");
+            printf("\"sha512\":\"");
+            for (i = 0; i < 64; i++) {
+                printf("%02x", sha_hash[i]);
+            }
+            printf("\"\n");
             printf("}\r\n");
 
         }
@@ -101,4 +116,3 @@ int parse_json(char *payload, int payload_size, char * data_val_ptr, size_t * da
 
     return 0;
 }
-
