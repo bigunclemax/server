@@ -2,6 +2,7 @@
 #include "json-parser/json.h"
 #include "engine/gosthash.h"
 #include <openssl/sha.h>
+#include<sys/socket.h>
 
 int main(int c, char** v)
 {
@@ -30,7 +31,7 @@ void get_sha_hash(const unsigned char* buffer, size_t bytes, unsigned char* out_
     SHA512_Final(out_buffer, &ctx);
 }
 
-void route()
+void route(int clientfd, char* uri, char* method, char* payload, int payload_size)
 {
     ROUTE_START()
 

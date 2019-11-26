@@ -10,19 +10,20 @@ void serve_forever(const char *PORT);
 
 // Client request
 
-char    *method,    // "GET" or "POST"
-        *uri,       // "/index.html" things before '?'
-        *qs,        // "a=1&b=2"     things after  '?'
-        *prot;      // "HTTP/1.1"
+//char    *method,    // "GET" or "POST"
+//        *uri,       // "/index.html" things before '?'
+//        *qs,        // "a=1&b=2"     things after  '?'
+//        *prot;      // "HTTP/1.1"
 
-char    *payload;     // for POST
-int      payload_size;
+//char    *payload;     // for POST
+//int      payload_size;
 
-char *request_header(const char* name);
+//char *request_header(const char* name);
 
 // user shall implement this function
 
-void route();
+//void route();
+void route(int clientfd, char* uri, char* method, char* payload, int payload_size);
 
 // some interesting macro for `route()`
 #define ROUTE_START()       if (0) {
