@@ -43,7 +43,7 @@ void * socketThread(void *arg)
         fprintf(stderr,"Client disconnected upexpectedly.\n");
     else    // message received
     {
-        fprintf(stderr,("recv() error\n"));
+        fprintf(stderr,("recv()\n"));
         // http magic go here
         buf[rcvd] = '\0';
 
@@ -93,18 +93,18 @@ void * socketThread(void *arg)
             payload_size = (rcvd-(t-buf));
         }
         // call router
-        dup2(clientfd, STDOUT_FILENO);
-        close(clientfd);
-//
+//        dup2(clientfd, STDOUT_FILENO);
+//        close(clientfd);
+
 //        // call router
 //        route();
 //
         route(clientfd, uri, method, payload, payload_size);
 
 //        // tidy up
-        fflush(stdout);
-        shutdown(STDOUT_FILENO, SHUT_WR);
-        close(STDOUT_FILENO);
+//        fflush(stdout);
+//        shutdown(STDOUT_FILENO, SHUT_WR);
+//        close(STDOUT_FILENO);
     }
     //Closing SOCKET
     shutdown(clientfd, SHUT_RDWR);         //All further send and recieve operations are DISABLED...

@@ -37,7 +37,19 @@ void route(int clientfd, char* uri, char* method, char* payload, int payload_siz
 
     ROUTE_GET("/")
     {
-        printf("HTTP/1.0 200 OK\r\nServer: cs\r\n\r\nHi buddy!");
+            const char* const fmt_header =
+                    "HTTP/1.0 200 OK\r\n"
+                    "Content-Type: text/html; charset=utf-8\r\n"
+                    "Content-Length: %ld\r\n"
+                    "\r\n"
+                    "%s";
+            char msg[] = "Hi there!";
+            char buf [200];
+            snprintf(buf, 200, fmt_header, strlen(msg), msg);
+
+            if (send(clientfd, buf, strlen(buf), 0) == -1) {
+                perror("send");
+            }
     }
 
     ROUTE_POST("/")
@@ -45,8 +57,20 @@ void route(int clientfd, char* uri, char* method, char* payload, int payload_siz
         char data[1024];
         size_t data_size;
         if(parse_json(payload, payload_size, data, &data_size)) {
-            printf("HTTP/1.0 400 Bad Request\r\n");
+
+            const char* const fmt_header = "HTTP/1.0 400 Bad Request\r\n";
+
+            if (send(clientfd, fmt_header, strlen(fmt_header), 0) == -1) {
+                perror("send");
+            }
+
         } else {
+
+            const char* const fmt_header =
+                    "HTTP/1.0 200 OK\r\n"
+                    "Content-Type: application/json\r\n"
+                    "\r\n"
+                    "{\"gost\" : \"%s\", \"sha512\" : \"%s\"}";
 
             //get gost hash
             unsigned char gost_hash[32];
@@ -57,21 +81,22 @@ void route(int clientfd, char* uri, char* method, char* payload, int payload_siz
             get_sha_hash((unsigned char*)data, data_size, sha_hash);
 
             //get resp
-            printf("HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n{\n");
-
             int i;
-            printf("\"gost\":\"");
+            char gost_str[65];
             for (i = 0; i < 32; i++) {
-                printf("%02x", gost_hash[i]);
+                sprintf(gost_str + 2 * i, "%02x", gost_hash[i]);
             }
-            printf("\",\n");
-            printf("\"sha512\":\"");
-            for (i = 0; i < 64; i++) {
-                printf("%02x", sha_hash[i]);
-            }
-            printf("\"\n");
-            printf("}\r\n");
 
+            char sha_str[129];
+            for (i = 0; i < 64; i++) {
+                sprintf(sha_str + 2 * i, "%02x", sha_hash[i]);
+            }
+
+            char buf [500];
+            snprintf(buf, 500, fmt_header, gost_str, sha_str);
+            if (send(clientfd, buf, strlen(buf), 0) == -1) {
+                perror("send");
+            }
         }
     }
 
