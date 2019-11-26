@@ -5,60 +5,50 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include <fcntl.h>
 #include <signal.h>
 #include<pthread.h>
 #include <semaphore.h>
-#define CONNMAX 3
+#include <errno.h>
+
+#define CONNMAX 2
 
 static int listenfd;
-static void error(char *);
 static void startServer(const char *);
-static void respond(int);
-
-//typedef struct { char *name, *value; } header_t;
-//static header_t reqhdr[17] = { {"\0", "\0"} };
-//static int clientfd;
-
 
 sem_t semaphore;
-#define TIMEOUT 5
-void * socketThread(void *arg)
+
+void * respondThread(void *arg)
 {
     int clientfd = *((int *)arg);
     int rcvd, fd, bytes_read;
     char *ptr;
-    //     char *buf;
     char buf[65535];
 //    buf = malloc(65535); //TODO: may be bottle neck
     rcvd=recv(clientfd, buf, 65535, 0);
 
     if (rcvd<0)    // receive error
-        fprintf(stderr,("recv() error\n"));
+        fprintf(stderr,"recv() error %s (%d) %d\n", strerror(errno), errno, clientfd);
     else if (rcvd==0)    // receive socket closed
         fprintf(stderr,"Client disconnected upexpectedly.\n");
-    else    // message received
+    else    // message received, parse http
     {
-        fprintf(stderr,("recv()\n"));
-        // http magic go here
         buf[rcvd] = '\0';
 
         char    *method,    // "GET" or "POST"
         *uri,       // "/index.html" things before '?'
         *qs,        // "a=1&b=2"     things after  '?'
-        *prot,      // "HTTP/1.1"
-        *payload;
+        *prot;      // "HTTP/1.1"
 
         method = strtok(buf,  " \t\r\n");
         uri    = strtok(NULL, " \t");
         prot   = strtok(NULL, " \t\r\n");
 
+#ifdef DEBUG
         fprintf(stderr, "\x1b[32m + [%s] %s\x1b[0m\n", method, uri);
-
+#endif
         qs = strchr(uri, '?');
         if (qs)
         {
@@ -68,7 +58,9 @@ void * socketThread(void *arg)
         }
 
         char *t;
+        char *payload;
         int payload_size = 0;
+
         while (1) {
             char *header,*header_val;
             header = strtok(NULL, "\r\n: \t");
@@ -79,38 +71,29 @@ void * socketThread(void *arg)
             if(!strcmp(header, "Content-Length")) {
                 payload_size = atol(header_val);
             }
-
+#ifdef DEBUG
             fprintf(stderr, "[H] %s: %s\n", header, header_val);
+#endif
             t = header_val + strlen(header_val) + 1;
             if (t[1] == '\r' && t[2] == '\n') { //TODO:
                 t += 2; break;
             }
         }
-        t++; // now the *t shall be the beginning of user payload
-//        t2 = request_header("Content-Length"); // and the related header if there is
-        payload = t;
+        payload = t + 1;
         if(!payload_size) {
             payload_size = (rcvd-(t-buf));
         }
         // call router
-//        dup2(clientfd, STDOUT_FILENO);
-//        close(clientfd);
-
-//        // call router
-//        route();
-//
         route(clientfd, uri, method, payload, payload_size);
-
-//        // tidy up
-//        fflush(stdout);
-//        shutdown(STDOUT_FILENO, SHUT_WR);
-//        close(STDOUT_FILENO);
     }
     //Closing SOCKET
     shutdown(clientfd, SHUT_RDWR);         //All further send and recieve operations are DISABLED...
     close(clientfd);
 
+#ifdef DEBUG
     printf("Exit socketThread %d\n", clientfd);
+#endif
+
     sem_post(&semaphore);
     pthread_detach(pthread_self());
     pthread_exit(NULL);
@@ -152,13 +135,15 @@ void serve_forever(const char *PORT)
         clientfd = accept (listenfd, (struct sockaddr *) &clientaddr, &addrlen);
         //for each client request creates a thread and assign the client request to it to process
         //so the main thread can entertain next request
-        if( pthread_create(&tid, NULL, socketThread, &clientfd) != 0 )
-            printf("Failed to create thread\n");
+        if( pthread_create(&tid, NULL, respondThread, &clientfd) != 0 )
+            fprintf(stderr, "Failed to create thread\n");
+#ifdef DEBUG
         else {
             printf("Thread created for sock: %d TID: ", clientfd);
             print_thread_id(tid);
             printf("\n");
         }
+#endif
     }
 }
 
@@ -200,96 +185,4 @@ void startServer(const char *port)
         perror("listen() error");
         exit(1);
     }
-}
-
-//
-//// get request header
-//char *request_header(const char* name)
-//{
-//    header_t *h = reqhdr;
-//    while(h->name) {
-//        if (strcmp(h->name, name) == 0) return h->value;
-//        h++;
-//    }
-//    return NULL;
-//}
-
-//client connection
-void respond(int n)
-{
-//    int rcvd, fd, bytes_read;
-//    char *ptr;
-//
-//    buf = malloc(65535); //TODO: may be bottle neck
-//    rcvd=recv(clients[n], buf, 65535, 0);
-//
-//    if (rcvd<0)    // receive error
-//        fprintf(stderr,("recv() error\n"));
-//    else if (rcvd==0)    // receive socket closed
-//        fprintf(stderr,"Client disconnected upexpectedly.\n");
-//    else    // message received
-//    {
-//        buf[rcvd] = '\0';
-////
-////        method = strtok(buf,  " \t\r\n");
-////        uri    = strtok(NULL, " \t");
-////        prot   = strtok(NULL, " \t\r\n");
-////
-////        fprintf(stderr, "\x1b[32m + [%s] %s\x1b[0m\n", method, uri);
-////
-////        if (qs = strchr(uri, '?'))
-////        {
-////            *qs++ = '\0'; //split URI
-////        } else {
-////            qs = uri - 1; //use an empty string
-////        }
-////
-//////        header_t *h = reqhdr;
-//////        char *t, *t2;
-//////        while(h < reqhdr+16) {
-////
-////        char *t;
-////        payload_size = 0;
-////        while (1) {
-////            char *header,*header_val;
-////            header = strtok(NULL, "\r\n: \t"); if (!header) break;
-////            header_val = strtok(NULL, "\r\n");     while(*header_val && *header_val == ' ') header_val++;
-//////            h->name  = header;
-//////            h->value = header_val;
-//////            h++;
-////            if(!strcmp(header, "Content-Length")) {
-////                payload_size = atol(header_val);
-////            }
-////
-////            fprintf(stderr, "[H] %s: %s\n", header, header_val);
-////            t = header_val + strlen(header_val) + 1;
-////            if (t[1] == '\r' && t[2] == '\n') { //TODO:
-////                t += 2; break;
-////            }
-////        }
-////        t++; // now the *t shall be the beginning of user payload
-//////        t2 = request_header("Content-Length"); // and the related header if there is
-////        payload = t;
-////        if(!payload_size) {
-////            payload_size = (rcvd-(t-buf));
-////        }
-////
-////        // bind clientfd to stdout, making it easier to write
-////        clientfd = clients[n];
-////        dup2(clientfd, STDOUT_FILENO);
-////        close(clientfd);
-////
-////        // call router
-////        route();
-////
-////        // tidy up
-////        fflush(stdout);
-//        shutdown(STDOUT_FILENO, SHUT_WR);
-//        close(STDOUT_FILENO);
-//    }
-//
-//    //Closing SOCKET
-//    shutdown(clientfd, SHUT_RDWR);         //All further send and recieve operations are DISABLED...
-//    close(clientfd);
-//    clients[n]=-1;
 }
