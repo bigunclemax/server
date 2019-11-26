@@ -22,7 +22,8 @@ sem_t semaphore;
 
 void * respondThread(void *arg)
 {
-    int clientfd = *((int *)arg);
+//    int clientfd = *((int *)arg);
+    int clientfd = arg; //TODO: hack
     int rcvd, fd, bytes_read;
     char *ptr;
     char buf[65535];
@@ -135,8 +136,11 @@ void serve_forever(const char *PORT)
         clientfd = accept (listenfd, (struct sockaddr *) &clientaddr, &addrlen);
         //for each client request creates a thread and assign the client request to it to process
         //so the main thread can entertain next request
-        if( pthread_create(&tid, NULL, respondThread, &clientfd) != 0 )
+//        if( pthread_create(&tid, NULL, respondThread, &clientfd) != 0 )
+        if( pthread_create(&tid, NULL, respondThread, clientfd) != 0 ) { //TODO: hack
             fprintf(stderr, "Failed to create thread\n");
+            sem_post(&semaphore);
+        }
 #ifdef DEBUG
         else {
             printf("Thread created for sock: %d TID: ", clientfd);
