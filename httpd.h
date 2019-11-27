@@ -3,6 +3,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
 
 void serve_forever(const char *PORT);
 void route(int clientfd, char* uri, char* method, char* payload, int payload_size);
@@ -17,7 +18,8 @@ void route(int clientfd, char* uri, char* method, char* payload, int payload_siz
                                     "HTTP/1.0 404 Not Found\r\n" \
                                     "Server: cs\r\n" \
                                     "\r\n"; \
-                            if (send(clientfd, fmt_header, strlen(fmt_header), 0) == -1) { perror("send"); } \
+                            if (send(clientfd, fmt_header, strlen(fmt_header), 0) == -1) { \
+                                fprintf(stderr, "send() error %s (%d)", strerror(errno), errno); } \
                             }
 
 #endif

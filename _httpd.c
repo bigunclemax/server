@@ -11,24 +11,75 @@
 #include <signal.h>
 #include<pthread.h>
 #include <semaphore.h>
-#include <errno.h>
 
-#define CONNMAX 2
+#define CONNMAX 1000
 
 static int listenfd;
 static void startServer(const char *);
 
 sem_t semaphore;
 
+void respond(int clientfd, char* buf, unsigned int rcvd)
+{
+    char *saveptr;
+    char    *method,    // "GET" or "POST"
+            *uri,       // "/index.html" things before '?'
+            *qs,        // "a=1&b=2"     things after  '?'
+            *prot;      // "HTTP/1.x"
+
+    method = strtok_r(buf,  " \t\r\n", &saveptr);
+    uri    = strtok_r(NULL, " \t", &saveptr);
+    prot   = strtok_r(NULL, " \t\r\n", &saveptr);
+
+#ifdef DEBUG
+    fprintf(stderr, "\x1b[32m + [%s] %s\x1b[0m\n", method, uri);
+#endif
+    qs = strchr(uri, '?');
+    if (qs)
+    {
+        *qs++ = '\0'; //split URI
+    } else {
+        qs = uri - 1; //use an empty string
+    }
+
+    char *t;
+    char *payload;
+    int payload_size = 0;
+
+    while (1) {
+        char *header,*header_val;
+        header = strtok_r(NULL, "\r\n: \t", &saveptr);
+        if (!header) break;
+
+        header_val = strtok_r(NULL, "\r\n", &saveptr);
+        while(*header_val && *header_val == ' ') header_val++;
+        if(!strcmp(header, "Content-Length")) {
+            payload_size = (int)strtol(header_val, (char **)NULL, 10);
+        }
+#ifdef DEBUG
+        fprintf(stderr, "[H] %s: %s\n", header, header_val);
+#endif
+        t = header_val + strlen(header_val) + 1;
+        if (t[1] == '\r' && t[2] == '\n') { //TODO:
+            t += 2; break;
+        }
+    }
+    payload = t + 1;
+    if(!payload_size) {
+        payload_size = (int)(rcvd-(t-buf));
+    }
+    //TODO: if wrong http handle error
+
+    // call router
+    route(clientfd, uri, method, payload, payload_size);
+}
+
 void * respondThread(void *arg)
 {
-//    int clientfd = *((int *)arg);
-    int clientfd = arg; //TODO: hack
-    int rcvd, fd, bytes_read;
-    char *ptr;
-    char buf[65535];
-//    buf = malloc(65535); //TODO: may be bottle neck
-    rcvd=recv(clientfd, buf, 65535, 0);
+    int clientfd = (int)arg; //TODO: hack //    int clientfd = *((int *)arg);
+    char buf[65535]; //    buf = malloc(65535); //TODO: may be bottle neck
+
+    int rcvd=recv(clientfd, buf, 65535, 0);
 
     if (rcvd<0)    // receive error
         fprintf(stderr,"recv() error %s (%d) %d\n", strerror(errno), errno, clientfd);
@@ -37,56 +88,9 @@ void * respondThread(void *arg)
     else    // message received, parse http
     {
         buf[rcvd] = '\0';
-
-        char    *method,    // "GET" or "POST"
-        *uri,       // "/index.html" things before '?'
-        *qs,        // "a=1&b=2"     things after  '?'
-        *prot;      // "HTTP/1.1"
-
-        method = strtok(buf,  " \t\r\n");
-        uri    = strtok(NULL, " \t");
-        prot   = strtok(NULL, " \t\r\n");
-
-#ifdef DEBUG
-        fprintf(stderr, "\x1b[32m + [%s] %s\x1b[0m\n", method, uri);
-#endif
-        qs = strchr(uri, '?');
-        if (qs)
-        {
-            *qs++ = '\0'; //split URI
-        } else {
-            qs = uri - 1; //use an empty string
-        }
-
-        char *t;
-        char *payload;
-        int payload_size = 0;
-
-        while (1) {
-            char *header,*header_val;
-            header = strtok(NULL, "\r\n: \t");
-            if (!header) break;
-
-            header_val = strtok(NULL, "\r\n");
-            while(*header_val && *header_val == ' ') header_val++;
-            if(!strcmp(header, "Content-Length")) {
-                payload_size = atol(header_val);
-            }
-#ifdef DEBUG
-            fprintf(stderr, "[H] %s: %s\n", header, header_val);
-#endif
-            t = header_val + strlen(header_val) + 1;
-            if (t[1] == '\r' && t[2] == '\n') { //TODO:
-                t += 2; break;
-            }
-        }
-        payload = t + 1;
-        if(!payload_size) {
-            payload_size = (rcvd-(t-buf));
-        }
-        // call router
-        route(clientfd, uri, method, payload, payload_size);
+        respond(clientfd, buf, rcvd);
     }
+
     //Closing SOCKET
     shutdown(clientfd, SHUT_RDWR);         //All further send and recieve operations are DISABLED...
     close(clientfd);
@@ -113,9 +117,6 @@ void serve_forever(const char *PORT)
     int clientfd;
     struct sockaddr_in clientaddr;
     socklen_t addrlen;
-    char c;
-
-    int slot=0;
 
     printf(
             "Server started %shttp://127.0.0.1:%s%s\n",
@@ -137,7 +138,7 @@ void serve_forever(const char *PORT)
         //for each client request creates a thread and assign the client request to it to process
         //so the main thread can entertain next request
 //        if( pthread_create(&tid, NULL, respondThread, &clientfd) != 0 )
-        if( pthread_create(&tid, NULL, respondThread, clientfd) != 0 ) { //TODO: hack
+        if( pthread_create(&tid, NULL, respondThread, (void*)clientfd) != 0 ) { //TODO: hack
             fprintf(stderr, "Failed to create thread\n");
             sem_post(&semaphore);
         }
@@ -175,7 +176,7 @@ void startServer(const char *port)
         if (listenfd == -1) continue;
         if (bind(listenfd, p->ai_addr, p->ai_addrlen) == 0) break;
     }
-    if (p==NULL)
+    if (NULL == p)
     {
         perror ("socket() or bind()");
         exit(1);
