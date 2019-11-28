@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
+#include <pthread.h>
 
 void serve_forever(const char *PORT);
 void route(int clientfd, char* uri, char* method, char* payload, int payload_size);

@@ -1,10 +1,10 @@
 #include "httpd.h"
-#include "json-parser/json.h"
 #include "engine/gosthash.h"
 #include <openssl/sha.h>
 #include <sys/socket.h>
 #include <jsmn.h>
 
+#define HASH_MULTITHREAD
 int main(int c, char** v)
 {
     serve_forever("2001");
@@ -71,16 +71,63 @@ int parse_json(const char * const payload, int payload_size, const char** ptr)
     return -1;
 }
 
+struct hash_args {
+    const unsigned char* data_ptr;
+    int data_sz;
+    unsigned char* hash;
+};
+
+void *get_gost_hash_tread(void *arguments)
+{
+    struct hash_args *args = arguments;
+    get_gost_hash(args->data_ptr, args->data_sz, args->hash);
+    pthread_exit(NULL);
+}
+
+void *get_sha_hash_tread(void *arguments)
+{
+    struct hash_args *args = arguments;
+    get_sha_hash(args->data_ptr, args->data_sz, args->hash);
+    pthread_exit(NULL);
+}
+
 int calc_hashes(const char * const data_ptr, int data_sz, unsigned char* gost_hash, unsigned char* sha_hash)
 {
-    //TODO: add multithread
+#ifdef HASH_MULTITHREAD
+
+    struct hash_args gost_args = {
+            .data_ptr = (unsigned char*)data_ptr,
+            .data_sz = data_sz,
+            .hash = gost_hash
+    };
+
+    struct hash_args sha_args = {
+            .data_ptr = (unsigned char*)data_ptr,
+            .data_sz = data_sz,
+            .hash = sha_hash
+    };
+
+    pthread_t gost_thread;
+    pthread_t sha_thread;
+
+    if (pthread_create(&gost_thread, NULL, &get_gost_hash_tread, (void *)&gost_args) != 0) {
+        fprintf(stderr, "Failed to create thread\n");
+        return -1;
+    }
+
+    if (pthread_create(&sha_thread, NULL, &get_sha_hash_tread, (void *)&sha_args) != 0) {
+        fprintf(stderr, "Failed to create thread\n");
+        return -1;
+    }
+
+    pthread_join(gost_thread, NULL);
+    pthread_join(sha_thread, NULL);
+#else
     //TODO: add rectodes
-    //get gost hash
+
     get_gost_hash((unsigned char*)data_ptr, data_sz, gost_hash);
-
-    //get sha hash
     get_sha_hash((unsigned char*)data_ptr, data_sz, sha_hash);
-
+#endif
     return 0;
 }
 
