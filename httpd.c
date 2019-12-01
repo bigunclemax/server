@@ -21,56 +21,77 @@ sem_t semaphore;
 void respond(int clientfd, char* buf, unsigned int rcvd)
 {
     char *saveptr;
-    char    *method,    // "GET" or "POST"
-            *uri,       // "/index.html" things before '?'
-            *qs,        // "a=1&b=2"     things after  '?'
-            *prot;      // "HTTP/1.x"
+    char    *method,
+            *uri,
+            *qs,
+            *prot;
 
-    method = strtok_r(buf,  " \t\r\n", &saveptr);
-    uri    = strtok_r(NULL, " \t", &saveptr);
+    method = strtok_r(buf,  " ", &saveptr);
+    if(NULL == method) {
+        goto err;
+    }
+    uri    = strtok_r(NULL, " ", &saveptr);
+    if(NULL == uri) {
+        goto err;
+    }
     prot   = strtok_r(NULL, " \t\r\n", &saveptr);
+    if(NULL == prot) {
+        goto err;
+    }
 
-#ifdef DEBUG
-    fprintf(stderr, "\x1b[32m + [%s] %s\x1b[0m\n", method, uri);
-#endif
     qs = strchr(uri, '?');
-    if (qs)
-    {
+    if (qs){
         *qs++ = '\0'; //split URI
     } else {
         qs = uri - 1; //use an empty string
     }
 
-    char *t;
-    char *payload;
+    char *payload = NULL;
+    char *content_type = NULL;
     int payload_size = 0;
+    int payload_sz_from_header = -1;
 
     while (1) {
+
+        if(saveptr[1] == '\r' && saveptr[2] == '\n') break;
+
         char *header,*header_val;
         header = strtok_r(NULL, "\r\n: \t", &saveptr);
         if (!header) break;
 
         header_val = strtok_r(NULL, "\r\n", &saveptr);
         while(*header_val && *header_val == ' ') header_val++;
-        if(!strcmp(header, "Content-Length")) {
-            payload_size = (int)strtol(header_val, (char **)NULL, 10);
-        }
+
 #ifdef DEBUG
         fprintf(stderr, "[H] %s: %s\n", header, header_val);
 #endif
-        t = header_val + strlen(header_val) + 1;
-        if (t[1] == '\r' && t[2] == '\n') { //TODO:
-            t += 2; break;
+        if(!strcmp(header, "Content-Length")) {
+            payload_sz_from_header = (int)strtol(header_val, (char **)NULL, 10);
+        }
+
+        if(!strcmp(header, "Content-Type")) {
+            content_type = header_val;
         }
     }
-    payload = t + 1;
-    if(!payload_size) {
-        payload_size = (int)(rcvd-(t-buf));
-    }
-    //TODO: if wrong http handle error
 
-    // call router
-    route(clientfd, uri, method, payload, payload_size);
+    payload = strtok_r(NULL, "\r\n", &saveptr);
+    if(payload != NULL) {
+        payload_size = (int)(rcvd-(payload-buf));
+        if(payload_sz_from_header > 0) {
+            if(payload_sz_from_header > payload_size) {
+                goto err;
+            } else {
+                payload_size = payload_sz_from_header;
+            }
+        }
+    }
+
+    route(clientfd, uri, method, payload, payload_size, content_type);
+
+    return;
+
+err:
+    route(clientfd, "", "ERROR", NULL, 0, NULL);
 }
 
 void * respondThread(void *arg)

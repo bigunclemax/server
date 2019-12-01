@@ -4,7 +4,8 @@
 #include <sys/socket.h>
 #include <jsmn.h>
 
-#define HASH_MULTITHREAD
+//#define HASH_MULTITHREAD
+
 int main(int c, char** v)
 {
     serve_forever("2001");
@@ -123,89 +124,125 @@ int calc_hashes(const char * const data_ptr, int data_sz, unsigned char* gost_ha
     pthread_join(gost_thread, NULL);
     pthread_join(sha_thread, NULL);
 #else
-    //TODO: add rectodes
-
     get_gost_hash((unsigned char*)data_ptr, data_sz, gost_hash);
     get_sha_hash((unsigned char*)data_ptr, data_sz, sha_hash);
 #endif
     return 0;
 }
 
-int process_request(const char * const payload, int payload_size, char* resp, int resp_max_len)
+int process_request(const char * const payload, int payload_size, unsigned char* gost_hash, unsigned char* sha_hash)
 {
     const char* data_ptr;
     int data_sz;
     data_sz = parse_json(payload, payload_size, &data_ptr);
-    if(data_sz < 0) {
+    if(data_sz < 0 || data_sz > 1024) {
         return -1;
     }
 
-    unsigned char gost_hash[32];
-    unsigned char sha_hash[64];
     if(calc_hashes(data_ptr, data_sz, gost_hash, sha_hash)) {
         return -1;
     }
 
-    //get resp
-    int i;
-    char gost_str[65];
-    for (i = 0; i < 32; i++) {
-        sprintf(gost_str + 2 * i, "%02x", gost_hash[i]);
-    }
-
-    char sha_str[129];
-    for (i = 0; i < 64; i++) {
-        sprintf(sha_str + 2 * i, "%02x", sha_hash[i]);
-    }
-
-    const char* const fmt_header =
-            "HTTP/1.0 200 OK\r\n"
-            "Content-Type: application/json\r\n"
-            "Content-Length: 220\r\n"
-            "\r\n"
-            "{\"gost\" : \"%s\", \"sha512\" : \"%s\"}";
-
-    snprintf(resp, resp_max_len, fmt_header, gost_str, sha_str);
-
     return 0;
 }
 
-void route(int clientfd, char* uri, char* method, char* payload, int payload_size)
+void route(int clientfd, char* uri, char* method, char* payload, int payload_size, char* content_type)
 {
     ROUTE_START()
 
     ROUTE_GET("/")
     {
-            const char* const fmt_header =
-                    "HTTP/1.0 200 OK\r\n"
-                    "Content-Type: text/html; charset=utf-8\r\n"
-                    "Content-Length: 9\r\n"
-                    "\r\n"
-                    "Hi there!";
+        const char* const fmt_header =
+                "HTTP/1.0 200 OK\r\n"
+                "Content-Type: text/html; charset=utf-8\r\n"
+                "Content-Length: 9\r\n"
+                "\r\n"
+                "Hi there!";
 
-            if (send(clientfd, fmt_header, strlen(fmt_header), 0) == -1) {
-                fprintf(stderr, "send() error %s (%d)", strerror(errno), errno);
-            }
-
+        if (send(clientfd, fmt_header, strlen(fmt_header), 0) == -1) {
+            fprintf(stderr, "send() error %s (%d)", strerror(errno), errno);
+        }
     }
 
     ROUTE_POST("/")
     {
-        // if application type json
-        const char* const fmt_header = "HTTP/1.0 400 Bad Request\r\n";
-        const char* resp_str;
-        char resp_msg[500];
+        const char* const fmt_header =
+                "HTTP/1.0 200 OK\r\n"
+                "Content-Type: text/html; charset=utf-8\r\n"
+                "Content-Length: 9\r\n"
+                "\r\n"
+                "Hi there!";
 
-        if(process_request(payload, payload_size, resp_msg, 500)) {
-            resp_str = fmt_header;
+        if (send(clientfd, fmt_header, strlen(fmt_header), 0) == -1) {
+            fprintf(stderr, "send() error %s (%d)", strerror(errno), errno);
+        }
+    }
+
+    ROUTE_POST("/hash")
+    {
+        // if application type json
+        const char* const err_header =
+                "HTTP/1.0 400 Bad Request\r\n\r\n";
+
+        const char* resp_str;
+        char resp_msg[500] = "HTTP/1.0 200 OK\r\n"
+                             "Content-Type: application/json\r\n"
+                             "Content-Length: 215\r\n"
+                             "\r\n"
+                             "{\"gost\":\"";
+
+        if(payload_size != 0
+            && payload != NULL
+            && content_type !=NULL
+            && !strcmp(content_type, "application/json"))
+        {
+
+            unsigned char gost_hash[32];
+            unsigned char sha_hash[64];
+
+            if(!process_request(payload, payload_size, gost_hash, sha_hash))
+            {
+                int i;
+                char * _str = resp_msg + strlen(resp_msg);
+                for (i = 0; i < 32; i++) {
+                    sprintf(_str + 2 * i, "%02x", gost_hash[i]);
+                }
+
+                _str += 64;
+                int res  = sprintf(_str, "\",\"sha512\":\"");
+                _str += res;
+                for (i = 0; i < 64; i++) {
+                    sprintf(_str + 2 * i, "%02x", sha_hash[i]);
+                }
+                _str += 128;
+                sprintf(_str, "\"}");
+
+                resp_str = resp_msg;
+
+            } else {
+                resp_str = err_header;
+            }
         } else {
-            resp_str = resp_msg;
+            resp_str = err_header;
         }
 
         if (send(clientfd, resp_str, strlen(resp_str), 0) == -1) {
             fprintf(stderr, "send() error %s (%d)", strerror(errno), errno);
         }
+    }
 
+    ROUTE_ERR()
+    {
+        char * resp_str;
+        if(strcmp("GET",method) != 0 && strcmp("HEAD",method) != 0 && strcmp("POST",method) != 0) {
+            resp_str = "HTTP/1.0 501 Not Implemented\r\n\r\n";
+        } else {
+            resp_str = "HTTP/1.0 404 Not Found\r\n\r\n";
+        }
+
+        if (send(clientfd, resp_str, strlen(resp_str), 0) == -1) {
+            fprintf(stderr, "send() error %s (%d)", strerror(errno), errno);
+        }
     }
 
     ROUTE_END()
