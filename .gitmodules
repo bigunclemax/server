@@ -1,3 +1,6 @@
 [submodule "jsmn"]
 	path = jsmn
 	url = https://github.com/zserge/jsmn.git
+[submodule "engine"]
+	path = engine
+	url = https://github.com/gost-engine/engine.git

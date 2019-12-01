@@ -4,11 +4,10 @@
 #include <sys/socket.h>
 #include <jsmn.h>
 
-//#define HASH_MULTITHREAD
-
 int main(int c, char** v)
 {
     serve_forever("2001");
+    pthread_exit(NULL);
     return 0;
 }
 

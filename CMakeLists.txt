@@ -3,11 +3,7 @@ project(server C)
 
 set(CMAKE_C_STANDARD 99)
 
-#include(engine/CMakeLists.txt)
-
+add_library(gost engine/gosthash.c engine/gost89.c)
 add_executable(server main.c httpd.c httpd.h)
-#add_executable(server server.c json-parser/json.c server.c)
-get_filename_component(gost_lib ./engine/bin/gost.so ABSOLUTE)
-message(${gost_lib})
-target_link_libraries(server m crypto pthread /home/user/Documents/server/engine/cmake-build-release/libgost.a)
-target_include_directories(server PRIVATE jsmn)
+target_link_libraries(server m crypto pthread gost)
+target_include_directories(server PRIVATE jsmn engine)
