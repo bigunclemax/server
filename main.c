@@ -35,7 +35,7 @@ void get_sha_hash(const unsigned char* buffer, size_t bytes, unsigned char* out_
 static int jsoneq(const char *json, jsmntok_t *tok, const char *s)
 {
     if (tok->type == JSMN_STRING && (int)strlen(s) == tok->end - tok->start &&
-        strncmp(json + tok->start, s, tok->end - tok->start) == 0) {
+        strncmp(json + tok->start, s, (size_t) (tok->end - tok->start)) == 0) {
         return 0;
     }
     return -1;
@@ -48,7 +48,7 @@ int parse_json(const char * const payload, int payload_size, const char** ptr)
     jsmntok_t t[10];
     jsmn_init(&p);
     int r;
-    r = jsmn_parse(&p, payload, payload_size, t, sizeof(t)/ sizeof(t[0]));
+    r = jsmn_parse(&p, payload, (const size_t) payload_size, t, sizeof(t) / sizeof(t[0]));
     if(r < 0) {
         fprintf(stderr,"Failed to parse JSON: %d\n", r);
         return -1;
@@ -80,14 +80,14 @@ struct hash_args {
 void *get_gost_hash_tread(void *arguments)
 {
     struct hash_args *args = arguments;
-    get_gost_hash(args->data_ptr, args->data_sz, args->hash);
+    get_gost_hash(args->data_ptr, (size_t) args->data_sz, args->hash);
     pthread_exit(NULL);
 }
 
 void *get_sha_hash_tread(void *arguments)
 {
     struct hash_args *args = arguments;
-    get_sha_hash(args->data_ptr, args->data_sz, args->hash);
+    get_sha_hash(args->data_ptr, (size_t) args->data_sz, args->hash);
     pthread_exit(NULL);
 }
 
@@ -123,8 +123,8 @@ int calc_hashes(const char * const data_ptr, int data_sz, unsigned char* gost_ha
     pthread_join(gost_thread, NULL);
     pthread_join(sha_thread, NULL);
 #else
-    get_gost_hash((unsigned char*)data_ptr, data_sz, gost_hash);
-    get_sha_hash((unsigned char*)data_ptr, data_sz, sha_hash);
+    get_gost_hash((unsigned char*)data_ptr, (size_t) data_sz, gost_hash);
+    get_sha_hash((unsigned char*)data_ptr, (size_t) data_sz, sha_hash);
 #endif
     return 0;
 }

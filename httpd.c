@@ -95,7 +95,7 @@ void * respondThread(void *arg)
     while(1) {
         addrlen = sizeof(clientaddr);
         int clientfd = accept (listenfd, (struct sockaddr *) &clientaddr, &addrlen);
-        int rcvd=recv(clientfd, buf, 65535, 0);
+        ssize_t rcvd=recv(clientfd, buf, 65535, 0);
 
         if (rcvd<0)    // receive error
             fprintf(stderr,"recv() error %s (%d) %d\n", strerror(errno), errno, clientfd);
@@ -104,7 +104,7 @@ void * respondThread(void *arg)
         else    // message received, parse http
         {
             buf[rcvd] = '\0';
-            respond(clientfd, buf, rcvd);
+            respond(clientfd, buf, (unsigned int) rcvd);
         }
 
         //Closing SOCKET
